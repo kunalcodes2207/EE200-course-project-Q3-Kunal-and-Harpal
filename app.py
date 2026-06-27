@@ -29,7 +29,7 @@ import fingerprint as fp
 # Paths / constants
 # --------------------------------------------------------------------------
 APP_DIR = os.path.dirname(os.path.abspath(__file__))
-SONG_DB_FOLDER = os.path.join(APP_DIR, "EE200 Project Song Database")
+SONG_DB_FOLDER = os.path.join(APP_DIR, "EE200_Project_Song_Database")
 DB_CACHE_PATH = os.path.join(APP_DIR, "fingerprint_db.pkl")
 SAMPLES_FOLDER = os.path.join(APP_DIR, "samples")     # optional, only used if present
 
