@@ -1,9 +1,8 @@
 streamlit>=1.32
-numpy==1.26.4
-scipy==1.11.4
-matplotlib==3.8.4
-pandas==2.2.2
-numba==0.59.1
-librosa==0.10.2.post1
-soundfile==0.12.1
-audioread==3.0.1
+numpy>=1.24
+scipy>=1.10
+matplotlib>=3.7
+pandas>=2.0
+librosa>=0.10
+soundfile>=0.12
+audioread>=3.0
