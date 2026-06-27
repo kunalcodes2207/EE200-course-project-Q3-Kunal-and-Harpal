@@ -147,7 +147,7 @@ def get_database(folder_signature: str):
         song_id = os.path.splitext(fn)[0]
         y = fp.load_audio(path)
         fpr = fp.fingerprint_audio(y)
-        db.add_song(song_id, song_id, fpr)
+        db.add_song(song_id, song_id, fpr, source_path=path)
         progress.progress((i + 1) / max(len(files), 1), text=f"Indexing… {fn}")
     progress.empty()
     try:
@@ -164,6 +164,35 @@ def load_database():
         st.stop()
     sig = fp.folder_fingerprint(SONG_DB_FOLDER)
     return get_database(sig)
+
+
+@st.cache_resource(show_spinner=False)
+def get_or_build_samples(folder_signature: str, n_samples: int = 5, clip_seconds: float = 15.0):
+    """Cuts a short clip from `n_samples` of the indexed songs so 'OR TRY A SAMPLE'
+    always has something to play, with zero manual setup. Clips are written once
+    to SAMPLES_FOLDER (as wav) and reused on later runs."""
+    db = load_database()
+    os.makedirs(SAMPLES_FOLDER, exist_ok=True)
+
+    song_ids = list(db.song_meta.keys())
+    step = max(1, len(song_ids) // max(n_samples, 1))
+    picked = song_ids[::step][:n_samples]
+
+    samples = []
+    for i, song_id in enumerate(picked, start=1):
+        out_path = os.path.join(SAMPLES_FOLDER, f"sample{i}.wav")
+        meta = db.song_meta[song_id]
+        src = meta.get("source_path")
+        if not os.path.exists(out_path) and src and os.path.exists(src):
+            import librosa
+            import soundfile as sf
+            full_dur = meta["n_frames"] * fp.HOP / fp.SR
+            offset = max(0.0, full_dur * 0.25)   # skip past any intro silence/fade-in
+            y, _ = librosa.load(src, sr=fp.SR, mono=True, offset=offset, duration=clip_seconds)
+            sf.write(out_path, y, fp.SR)
+        if os.path.exists(out_path):
+            samples.append(out_path)
+    return samples
 
 
 @st.cache_data(show_spinner=False)
@@ -429,32 +458,32 @@ with tab_identify:
 
     chosen_bytes = None
 
-    # Handle Sample Tracks
-    if os.path.isdir(SAMPLES_FOLDER):
-        sample_files = fp.folder_audio_files(SAMPLES_FOLDER)
-        if sample_files:
-            st.markdown('<div class="eyebrow" style="margin-top:10px;">OR TRY A SAMPLE</div>', unsafe_allow_html=True)
-            for spath in sample_files:
-                sname = os.path.splitext(os.path.basename(spath))[0]
-                
-                # Check active state
-                is_active = (st.session_state["active_sample"] == spath)
+    # Handle Sample Tracks (auto-generated from the indexed library, no manual setup needed)
+    sig = fp.folder_fingerprint(SONG_DB_FOLDER)
+    sample_files = get_or_build_samples(sig)
+    if sample_files:
+        st.markdown('<div class="eyebrow" style="margin-top:10px;">OR TRY A SAMPLE</div>', unsafe_allow_html=True)
+        for spath in sample_files:
+            sname = os.path.splitext(os.path.basename(spath))[0]
 
-                c1, c2 = st.columns([5, 1])
-                with c1:
-                    if is_active:
-                        # Draw the highlight!
-                        st.markdown(f"<div style='color: {TEAL}; font-size: 0.85rem; font-weight: 700; margin-bottom: -10px;'>▶ TARGET TRACK: {sname}</div>", unsafe_allow_html=True)
-                    st.audio(spath)
-                with c2:
-                    if is_active:
-                        st.markdown("<div style='height: 25px;'></div>", unsafe_allow_html=True) 
-                    else:
-                        st.markdown("<div style='height: 12px;'></div>", unsafe_allow_html=True)
-                    
-                    # Attach the callback here
-                    st.button("Try", key=f"try_{sname}", type="primary" if is_active else "secondary",
-                              on_click=trigger_sample, args=(spath,))
+            # Check active state
+            is_active = (st.session_state["active_sample"] == spath)
+
+            c1, c2 = st.columns([5, 1])
+            with c1:
+                if is_active:
+                    # Draw the highlight!
+                    st.markdown(f"<div style='color: {TEAL}; font-size: 0.85rem; font-weight: 700; margin-bottom: -10px;'>▶ TARGET TRACK: {sname}</div>", unsafe_allow_html=True)
+                st.audio(spath)
+            with c2:
+                if is_active:
+                    st.markdown("<div style='height: 25px;'></div>", unsafe_allow_html=True) 
+                else:
+                    st.markdown("<div style='height: 12px;'></div>", unsafe_allow_html=True)
+                
+                # Attach the callback here
+                st.button("Try", key=f"try_{sname}", type="primary" if is_active else "secondary",
+                          on_click=trigger_sample, args=(spath,))
 
     # Handle File Uploads (Overrides active sample)
     if uploaded is not None:
